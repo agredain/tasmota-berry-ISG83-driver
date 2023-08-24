@@ -1,31 +1,54 @@
 import webserver # import webserver class
+import gpio
+import json
 
 var up_button = 1
 var down_button = 0
 
-def short_press(relay)
-    def power_off()
-        tasmota.set_power(relay, false)
+
+class Isg83ButtonAdapter
+  var down_gpio, up_gpio
+
+  def init(down_gpio, up_gpio)
+    self.down_gpio = down_gpio
+    self.up_gpio = up_gpio
+    gpio.digital_write(self.down_gpio, gpio.HIGH)
+    gpio.digital_write(self.up_gpio, gpio.HIGH)
     end
-    tasmota.set_power(relay, true)
-    tasmota.set_timer(500, power_off)
+
+  def button_press(gpio_pin_list)
+    for gpio_pin: gpio_pin_list
+      gpio.digital_write(gpio_pin, gpio.HIGH)
+    end
 end
 
-def long_press(relay)
-    def power_off()
-        tasmota.set_power(relay, false)
+  def button_release(gpio_pin_list)
+    for gpio_pin: gpio_pin_list
+      gpio.digital_write(gpio_pin, gpio.HIGH)
     end
-    tasmota.set_power(relay, true)
-    tasmota.set_timer(4000, power_off)
 end
+
+  def click(gpio_pin_list, timeout)
+    self.button_press(gpio_pin_list)
+    tasmota.delay(timeout)
+    self.button_release(gpio_pin_list)
+  end
+  
+  def short_click(gpio_pin_list)
+    self.click(gpio_pin_list, 500)
+  end
+
+  def long_click(gpio_pin_list)
+    self.click(gpio_pin_list, 3000)
+  end
+end
+  
 
 class Isg83: Driver
-  var opened
-  var til_mode
+  var adapter
 
-  def init()
-    self.opened = 100.0
-    self.til_mode = false
+  def init(down_gpio, up_gpio)
+    self.adapter = Isg83ButtonAdapter(down_gpio, up_gpio)
   end
 
   def every_second()
@@ -33,55 +56,18 @@ class Isg83: Driver
   end
 
   def web_add_main_button()
+    # for line: html["til-buttons"]
+    #   webserver.content_send(line)
+    # end
     webserver.content_send('<p>hola</p>')
-    webserver.content_send('<table style="width:100%"> <tbody> <tr> <td style="width:30%"> <button onclick="la(\'&button_presed=up\');" name="">▲</button> </td> <td style="width:40%"> <button onclick="la(\'&button_presed=center\');" name="">o</button> </td> <td style="width:30%"> <button onclick="la(\'&button_presed=down\');" name="">▼</button> </td> </tr> <tr></tr> </tbody> </table>')
   end
 
-  def handle_normal(option)
-    if option == "up"
-      short_press(up_button)
-      tasmota.delay(500)
-      short_press(up_button)
-      short_press(down_button)
-    elif option == "down"
-      short_press(down_button)
-      tasmota.delay(500)
-      short_press(up_button)
-      short_press(down_button)
-    elif option == "center"
-      long_press(up_button)
-      long_press(down_button)
-      self.til_mode = true
-    end
-  end
 
-  def handle_til(option)
-    if option == "up"
-      short_press(up_button)
-    elif option == "down"
-      short_press(down_button)
-    elif option == "center"
-      long_press(up_button)
-      long_press(down_button)
-      self.til_mode = false
-    end
-  end
-
-  def web_sensor()
+  def web_sensor() # display sensor information on the Web UI
 
     if webserver.has_arg("button_presed")
       var button_presed = webserver.arg("button_presed")
-      if self.til_mode
-        self.handle_til(button_presed)
-      else
-        self.handle_normal(button_presed)
       end
-
-    end
-
   end
 end
 
-var d1 = Isg84()
-
-tasmota.add_driver(d1)
